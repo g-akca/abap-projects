@@ -13,22 +13,25 @@ CLASS lcl_application DEFINITION.
 
     " OO ALV
     DATA: mo_grid     TYPE REF TO cl_gui_alv_grid,
-          mt_fieldcat TYPE lvc_t_fcat.
+          mt_fieldcat TYPE lvc_t_fcat,
+          mt_outdat TYPE TABLE OF zgkc_hw_005_s.
 
     " SALV
-    DATA: mo_salv     TYPE REF TO cl_salv_table,
-          mo_columns TYPE REF TO cl_salv_columns_table,
-          mo_cont TYPE REF TO cl_gui_custom_container,
-          mo_selections type ref to cl_salv_selections.
+    DATA: mo_salv       TYPE REF TO cl_salv_table,
+          mo_columns    TYPE REF TO cl_salv_columns_table,
+          mo_cont       TYPE REF TO cl_gui_custom_container,
+          mo_selections TYPE REF TO cl_salv_selections,
+          mt_popdat TYPE TABLE OF zgkc_hw_005_s2.
 
-    DATA: mt_outdat TYPE TABLE OF zgkc_hw_005_s,
-          mt_popdat TYPE TABLE OF zgkc_hw_005_s2,
-          mt_sfdat TYPE TABLE OF zgkc_hw_005_s3,
-          ms_sfdat TYPE zgkc_hw_005_s3.
+    " Smartform
+    DATA: mt_sfdat  TYPE TABLE OF zgkc_hw_005_s3,
+          ms_sfdat  TYPE zgkc_hw_005_s3.
 
     METHODS:
       initialization,
-      at_selection_screen,
+      at_selection_screen
+        EXCEPTIONS
+          contains_error,
       start_of_selection,
       retrieve_dat
         IMPORTING
@@ -86,11 +89,13 @@ CLASS lcl_application DEFINITION.
           iv_sk TYPE bkpf-bukrs
           iv_my TYPE bkpf-gjahr
           iv_bn TYPE bkpf-belnr,
-      display_sf.
+      display_sf
+        EXCEPTIONS
+          contains_error.
 
   PRIVATE SECTION.
     CONSTANTS:
-      mc_strname TYPE tabname VALUE 'ZGKC_HW_005_S',
+      mc_strname  TYPE tabname VALUE 'ZGKC_HW_005_S',
       mc_strname2 TYPE tabname VALUE 'ZGKC_HW_005_S2'.
 ENDCLASS.
 
@@ -115,7 +120,8 @@ CLASS lcl_application IMPLEMENTATION.
           action    = 'S'
           view_name = 'ZGKC_ISKONTO_T'.
       IF sy-subrc <> 0.
-        " Implement suitable error handling here
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
       ENDIF.
     ELSEIF sscrfields-ucomm = 'BUT2'.
       CALL FUNCTION 'VIEW_MAINTENANCE_CALL'
@@ -123,7 +129,8 @@ CLASS lcl_application IMPLEMENTATION.
           action    = 'U'
           view_name = 'ZGKC_ISKONTO_T'.
       IF sy-subrc <> 0.
-        " Implement suitable error handling here
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
       ENDIF.
     ENDIF.
   ENDMETHOD.
@@ -161,16 +168,11 @@ CLASS lcl_application IMPLEMENTATION.
       <ms_outdat>-tutar2 = <ms_outdat>-wrbtr * ( 100 - <ms_outdat>-iskonto ) / 100.
     ENDLOOP.
 
-    IF NOT sy-subrc IS INITIAL.
-      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
-    ENDIF.
-
     CALL SCREEN 0100.
   ENDMETHOD.
 
   METHOD alv_session.
-    IF NOT lines( app->mt_outdat ) IS INITIAL.
+    IF lines( app->mt_outdat ) IS NOT INITIAL.
       app->display_alvdat(
         EXCEPTIONS
           contains_error = 1
@@ -268,19 +270,13 @@ CLASS lcl_application IMPLEMENTATION.
       CHANGING
         ct_fieldcat      = mt_fieldcat.
     IF sy-subrc <> 0.
-      " Implement suitable error handling here
-    ENDIF.
-
-    IF sy-subrc <> 0.
       MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
         WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
     ENDIF.
   ENDMETHOD.
 
   METHOD update_fieldcat.
-    DATA: _text(40) TYPE c.
     LOOP AT mt_fieldcat REFERENCE INTO DATA(r_fieldcat).
-      CLEAR: _text.
       CASE r_fieldcat->fieldname .
         WHEN 'SELKZ'.
           r_fieldcat->tech = abap_true.
@@ -289,9 +285,6 @@ CLASS lcl_application IMPLEMENTATION.
         WHEN 'BELNR'.
           r_fieldcat->hotspot = abap_true.
       ENDCASE.
-      IF _text <> space.
-        MOVE _text TO: r_fieldcat->scrtext_l, r_fieldcat->scrtext_m, r_fieldcat->scrtext_s, r_fieldcat->reptext.
-      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
@@ -303,10 +296,14 @@ CLASS lcl_application IMPLEMENTATION.
     CALL METHOD im_grid->register_edit_event
       EXPORTING
         i_event_id = cl_gui_alv_grid=>mc_evt_modified.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
+    ENDIF.
 
-    SET HANDLER me->handle_hotspot_click FOR im_grid.
-    SET HANDLER me->handle_user_command  FOR im_grid.
-    SET HANDLER me->handle_data_changed   FOR im_grid.
+    SET HANDLER: me->handle_data_changed  FOR im_grid,
+                 me->handle_hotspot_click FOR im_grid,
+                 me->handle_user_command  FOR im_grid.
   ENDMETHOD.
 
   METHOD refresh_alv.
@@ -346,7 +343,7 @@ CLASS lcl_application IMPLEMENTATION.
       SET PARAMETER ID 'BLN' FIELD <ms_outdat>-belnr.
       SET PARAMETER ID 'BUK' FIELD <ms_outdat>-bukrs.
       SET PARAMETER ID 'GJR' FIELD <ms_outdat>-gjahr.
-      CALL TRANSACTION 'FB03'.
+      CALL TRANSACTION 'FB03' AND SKIP FIRST SCREEN.
     ENDIF.
   ENDMETHOD.
 
@@ -414,7 +411,7 @@ CLASS lcl_application IMPLEMENTATION.
     IF mo_cont IS NOT BOUND.
       CREATE OBJECT mo_cont
         EXPORTING
-          container_name  = 'C_POPUP'.
+          container_name = 'C_POPUP'.
 
       cl_salv_table=>factory(
         EXPORTING
@@ -439,7 +436,7 @@ CLASS lcl_application IMPLEMENTATION.
   METHOD retrieve_sf_data.
     FREE: mt_sfdat.
 
-    SELECT bkpf~gjahr, bkpf~belnr, bseg~buzei, bseg~sgtxt, bseg~lifnr,
+    SELECT bkpf~gjahr, bkpf~belnr, bkpf~bldat, bseg~buzei, bseg~sgtxt, bseg~lifnr,
       bseg~gsber, bkpf~xblnr, bseg~shkzg, bseg~wrbtr
     FROM bkpf
     JOIN bseg ON bkpf~bukrs = bseg~bukrs AND bkpf~belnr = bseg~belnr AND bkpf~gjahr = bseg~gjahr
@@ -447,30 +444,32 @@ CLASS lcl_application IMPLEMENTATION.
     INTO CORRESPONDING FIELDS OF TABLE @mt_sfdat.
 
     READ TABLE mt_sfdat INTO ms_sfdat INDEX 1.
-    READ TABLE mt_outdat ASSIGNING FIELD-SYMBOL(<ms_outdat>) WITH KEY lifnr = ms_sfdat-lifnr.
+    READ TABLE mt_outdat ASSIGNING FIELD-SYMBOL(<ms_outdat>) WITH KEY belnr = ms_sfdat-belnr.
     ms_sfdat-iskonto = <ms_outdat>-iskonto.
-    ms_sfdat-tutar2  = ms_sfdat-wrbtr * ( 100 - ms_sfdat-iskonto ) / 100.
+    ms_sfdat-tutar2  = <ms_outdat>-tutar2.
   ENDMETHOD.
 
   METHOD display_sf.
-    DATA: lv_fm_name TYPE rs38l_fnam.
+    DATA: lv_fm TYPE rs38l_fnam.
 
     CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
       EXPORTING
-        formname           = 'ZGKC_HW_005_SF'
+        formname = 'ZGKC_HW_005_SF'
       IMPORTING
-        fm_name            = lv_fm_name.
+        fm_name  = lv_fm.
     IF sy-subrc <> 0.
-      " Implement suitable error handling here
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
     ENDIF.
 
-    CALL FUNCTION lv_fm_name
+    CALL FUNCTION lv_fm
       EXPORTING
         ms_sfdat = ms_sfdat
       TABLES
         mt_sfdat = mt_sfdat.
     IF sy-subrc <> 0.
-      " Implement suitable error handling here
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
     ENDIF.
   ENDMETHOD.
 ENDCLASS.

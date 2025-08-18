@@ -129,6 +129,13 @@ MODULE user_command_0200 INPUT.
       SET vtarih = gv_vtarih2
       WHERE islemno = gv_islemno2.
 
+      READ TABLE gt_list ASSIGNING FIELD-SYMBOL(<fs_list>) WITH KEY islemno = gv_islemno2.
+      IF sy-subrc = 0.
+        <fs_list>-vtarih  = gv_vtarih2.
+        <fs_list>-istisna = '@08@'.
+        <fs_list>-color   = ''.
+      ENDIF.
+
       MESSAGE 'Kitap başarıyla teslim alındı.' TYPE 'S'.
       CLEAR: gv_islemno2, gv_ogrno2, gv_kitapno2, gv_vtarih2.
       FREE MEMORY.
@@ -187,6 +194,26 @@ MODULE user_command_0300 INPUT.
       UPDATE zgkc_islem_t
       SET ogrno = @gv_ogrno3, kitapno = @gv_kitapno3, atarih = @gv_atarih3, vtarih = @gv_vtarih3
       WHERE islemno = @gv_islemno3.
+
+      READ TABLE gt_list ASSIGNING FIELD-SYMBOL(<fs_list2>) WITH KEY islemno = gv_islemno3.
+      IF sy-subrc = 0.
+        <fs_list2>-ogrno = gv_ogrno3.
+        <fs_list2>-kitapno = gv_kitapno3.
+        <fs_list2>-atarih = gv_atarih3.
+        <fs_list2>-vtarih = gv_vtarih3.
+        IF gs_list-vtarih IS INITIAL.
+          IF sy-datum - <fs_list2>-atarih >= 15.
+            <fs_list2>-color = 'C611'.
+            <fs_list2>-istisna = '@0A@'.
+          ELSE.
+            <fs_list2>-color = ''.
+            <fs_list2>-istisna = '@09@'.
+          ENDIF.
+        ELSE.
+          <fs_list2>-color = ''.
+          <fs_list2>-istisna = '@08@'.
+        ENDIF.
+      ENDIF.
 
       MESSAGE 'İşlem başarıyla güncellendi.' TYPE 'S'.
       CLEAR: gv_islemno3, gv_ogrno3, gv_kitapno3, gv_atarih3, gv_vtarih3.

@@ -145,7 +145,6 @@ FORM user_command USING p_ucomm TYPE sy-ucomm
       ENDIF.
 
       CALL SCREEN 0200 STARTING AT 60 10 ENDING AT 120 30.
-      PERFORM get_data.
 
     WHEN '&GNC'.
       READ TABLE gt_list INTO gs_list WITH KEY secim = abap_true.
@@ -158,7 +157,6 @@ FORM user_command USING p_ucomm TYPE sy-ucomm
       ENDIF.
 
       CALL SCREEN 0300 STARTING AT 60 10 ENDING AT 120 30.
-      PERFORM get_data.
 
     WHEN '&SIL'.
       DATA: lv_ans(1).
