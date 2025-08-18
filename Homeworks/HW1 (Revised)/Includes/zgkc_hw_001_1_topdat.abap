@@ -2,16 +2,11 @@
 *& Include          ZGKC_HW_001_1_TOPDAT
 *&---------------------------------------------------------------------*
 
-DATA: gv_last_checked TYPE string,
-      gv_result       TYPE p DECIMALS 2.
-
 CLASS calc_application DEFINITION DEFERRED.
 DATA: mo_application TYPE REF TO calc_application.
 
 SELECTION-SCREEN BEGIN OF BLOCK shape WITH FRAME TITLE TEXT-001.
-PARAMETERS: p_square AS CHECKBOX USER-COMMAND check,
-            p_rect   AS CHECKBOX USER-COMMAND check,
-            p_tri    AS CHECKBOX USER-COMMAND check.
+PARAMETERS: p_shape AS LISTBOX VISIBLE LENGTH 20 USER-COMMAND usr.
 SELECTION-SCREEN END OF BLOCK shape.
 
 SELECTION-SCREEN BEGIN OF BLOCK calc WITH FRAME TITLE TEXT-002.

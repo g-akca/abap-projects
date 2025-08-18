@@ -11,6 +11,15 @@ CLASS calc_application DEFINITION.
         RETURNING
           VALUE(ro_app) TYPE REF TO calc_application.
 
+    TYPE-POOLS: vrm.
+
+    DATA: it_values TYPE vrm_values,
+          wa_values TYPE vrm_value,
+          g_id      TYPE vrm_id.
+
+    DATA: gv_last_checked TYPE string,
+          gv_result       TYPE p DECIMALS 2.
+
     METHODS:
       initialization,
       at_selection_screen_output,
@@ -34,31 +43,35 @@ CLASS calc_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD initialization.
+    wa_values-key = 'S'.
+    wa_values-text = 'KARE'.
+    APPEND wa_values TO it_values.
+    CLEAR wa_values.
+    wa_values-key = 'R'.
+    wa_values-text = 'DİKDORTGEN'.
+    APPEND wa_values TO it_values.
+    CLEAR wa_values.
+    wa_values-key = 'T'.
+    wa_values-text = 'ÜÇGEN'.
+    APPEND wa_values TO it_values.
+    CLEAR wa_values.
+    g_id = 'p_shape'.
+
+    CALL FUNCTION 'VRM_SET_VALUES'
+      EXPORTING
+        id     = g_id
+        values = it_values.
   ENDMETHOD.
 
   METHOD at_selection_screen_output.
     LOOP AT SCREEN.
-      IF p_square EQ abap_true AND gv_last_checked <> 'square'.
-        p_rect = abap_false.
-        p_tri = abap_false.
-        gv_last_checked = 'square'.
-      ELSEIF p_rect EQ abap_true AND gv_last_checked <> 'rect'.
-        p_square = abap_false.
-        p_tri = abap_false.
-        gv_last_checked = 'rect'.
-      ELSEIF p_tri EQ abap_true  AND gv_last_checked <> 'tri'.
-        p_rect = abap_false.
-        p_square = abap_false.
-        gv_last_checked = 'tri'.
-      ENDIF.
-
       IF screen-group1 EQ 'GR1' OR screen-group1 EQ 'GR2' OR screen-group1 EQ 'GR3'.
         screen-active = 0.
-        IF p_square EQ abap_true AND screen-group1 EQ 'GR1'.
+        IF p_shape = 'S' AND screen-group1 EQ 'GR1'.
           screen-active = 1.
-        ELSEIF p_rect EQ abap_true AND screen-group1 EQ 'GR2'.
+        ELSEIF p_shape = 'R' AND screen-group1 EQ 'GR2'.
           screen-active = 1.
-        ELSEIF p_tri EQ abap_true AND screen-group1 EQ 'GR3'.
+        ELSEIF p_shape = 'T' AND screen-group1 EQ 'GR3'.
           screen-active = 1.
         ENDIF.
       ENDIF.
@@ -67,17 +80,17 @@ CLASS calc_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD start_of_selection.
-    IF p_square EQ abap_true AND p_area EQ abap_true.
+    IF p_shape = 'S' AND p_area EQ abap_true.
       app->calc_sq_area( ).
-    ELSEIF p_square EQ abap_true AND p_perim EQ abap_true.
+    ELSEIF p_shape = 'S' AND p_perim EQ abap_true.
       app->calc_sq_perim( ).
-    ELSEIF p_rect EQ abap_true AND p_area EQ abap_true.
+    ELSEIF p_shape = 'R' AND p_area EQ abap_true.
       app->calc_rc_area( ).
-    ELSEIF p_rect EQ abap_true AND p_perim EQ abap_true.
+    ELSEIF p_shape = 'R' AND p_perim EQ abap_true.
       app->calc_rc_perim( ).
-    ELSEIF p_tri EQ abap_true AND p_area EQ abap_true.
+    ELSEIF p_shape = 'T' AND p_area EQ abap_true.
       app->calc_tri_area( ).
-    ELSEIF p_tri EQ abap_true AND p_perim EQ abap_true.
+    ELSEIF p_shape = 'T' AND p_perim EQ abap_true.
       app->calc_tri_perim( ).
     ELSE.
       WRITE 'Lütfen bir şekil seçin.'.
@@ -109,7 +122,7 @@ CLASS calc_application IMPLEMENTATION.
     WRITE: 'Üçgen Alanı: ', gv_result.
   ENDMETHOD.
 
-   METHOD calc_tri_perim.
+  METHOD calc_tri_perim.
     gv_result = sqrt( p_height ** 2 + p_base ** 2 ) + p_height + p_base.
     WRITE: 'Üçgen Çevresi: ', gv_result.
   ENDMETHOD.
