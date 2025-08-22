@@ -2,7 +2,7 @@
 *& Include          ZGKC_HW_005_PAI
 *&---------------------------------------------------------------------*
 
-MODULE USER_COMMAND_0100.
+MODULE user_command_0100.
   CASE sy-ucomm.
     WHEN '&BACK'.
       LEAVE TO SCREEN 0.
@@ -11,7 +11,7 @@ MODULE USER_COMMAND_0100.
   ENDCASE.
 ENDMODULE.
 
-MODULE USER_COMMAND_0200.
+MODULE user_command_0200.
   CASE sy-ucomm.
     WHEN 'EXIT'.
       LEAVE TO SCREEN 0.

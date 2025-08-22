@@ -157,7 +157,7 @@ CLASS lcl_application IMPLEMENTATION.
     JOIN bseg ON bkpf~bukrs = bseg~bukrs AND bkpf~belnr = bseg~belnr AND bkpf~gjahr = bseg~gjahr
     JOIN lfa1 ON bseg~lifnr = lfa1~lifnr
     JOIN zgkc_iskonto_t AS isk ON bseg~lifnr = isk~satici
-    WHERE bkpf~bukrs = @iv_sk AND bkpf~gjahr = @iv_my
+    WHERE bkpf~bukrs = @iv_sk AND bkpf~gjahr = @iv_my AND bseg~lifnr IN @s_satici AND bkpf~monat IN @s_donem
     INTO CORRESPONDING FIELDS OF TABLE @mt_outdat.
     IF sy-subrc <> 0.
       MESSAGE 'Girilen şirket kodu ve yıl ile sistemde veri bulunamadı.' TYPE 'I' DISPLAY LIKE 'W'.

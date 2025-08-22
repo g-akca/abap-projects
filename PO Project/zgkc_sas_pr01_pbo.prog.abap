@@ -1,9 +1,9 @@
 *&---------------------------------------------------------------------*
-*& Include          ZGKC_HW_005_PBO
+*& Include          ZGKC_SAS_PR01_PBO
 *&---------------------------------------------------------------------*
 
 MODULE status_0100 OUTPUT.
-  SET PF-STATUS 'STANDARD'.
+  SET PF-STATUS '0100'.
 ENDMODULE.
 
 MODULE pbo_0100 OUTPUT.
@@ -15,12 +15,4 @@ MODULE pbo_0100 OUTPUT.
     MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
       WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
   ENDIF.
-ENDMODULE.
-
-MODULE status_0200 OUTPUT.
-  SET PF-STATUS '0200'.
-ENDMODULE.
-
-MODULE pbo_0200 OUTPUT.
-  lcl_application=>app->display_popup_alv( ).
 ENDMODULE.
