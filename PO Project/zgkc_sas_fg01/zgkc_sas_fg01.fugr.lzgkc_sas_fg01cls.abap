@@ -398,7 +398,7 @@ CLASS lcl_application IMPLEMENTATION.
         IMPORTING
           number      = ms_po-ebeln.
       ms_po-ebeln = |P{ ms_po-ebeln }|.
-      ms_po-status = '@09@'.
+      ms_po-status = '01'.
       ms_po-bukrs = zgkc_po_key-bukrs.
       ms_po-waers = zgkc_po_key-waers.
       ms_po-erdat = zgkc_po_item-datum.

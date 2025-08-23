@@ -85,7 +85,9 @@ CLASS lcl_application DEFINITION.
           e_interactive,
       handle_user_command FOR EVENT user_command OF cl_gui_alv_grid
         IMPORTING
-          e_ucomm.
+          e_ucomm,
+      approve_po,
+      reject_po.
 
   PRIVATE SECTION.
     CONSTANTS:
@@ -143,6 +145,13 @@ CLASS lcl_application IMPLEMENTATION.
 
     LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
       <fs_outdat>-msgshw = icon_message_faulty_orphan.
+      IF <fs_outdat>-status = '01'.
+        <fs_outdat>-light = '@09@'.
+      ELSEIF <fs_outdat>-status = '02'.
+        <fs_outdat>-light = '@08@'.
+      ELSEIF <fs_outdat>-status = '03'.
+        <fs_outdat>-light = '@0A@'.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
@@ -363,9 +372,9 @@ CLASS lcl_application IMPLEMENTATION.
     LOOP AT mt_fieldcat REFERENCE INTO DATA(r_fieldcat).
       CLEAR: _text.
       CASE r_fieldcat->fieldname.
-        WHEN 'SELKZ' OR 'MSGDAT'.
+        WHEN 'SELKZ' OR 'MSGDAT' OR 'STATUS'.
           r_fieldcat->tech = abap_true.
-        WHEN 'STATUS'.
+        WHEN 'LIGHT'.
           _text = 'Status'.
         WHEN 'EBELN'.
           r_fieldcat->hotspot = abap_true.
@@ -502,8 +511,58 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD handle_user_command.
+    mo_grid->get_selected_rows(
+      IMPORTING
+        et_row_no     = DATA(t_seldat)
+    ).
+
+    LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
+      <fs_outdat>-selkz = abap_false.
+      READ TABLE t_seldat WITH KEY row_id = sy-tabix ASSIGNING FIELD-SYMBOL(<seldat>).
+      IF sy-subrc = 0.
+        <fs_outdat>-selkz = abap_true.
+      ENDIF.
+    ENDLOOP.
+
+    READ TABLE mt_outdat ASSIGNING FIELD-SYMBOL(<selected>) WITH KEY selkz = abap_true.
+    IF sy-subrc <> 0.
+      MESSAGE 'Please select an item.' TYPE 'I'.
+      EXIT.
+    ENDIF.
+
     CASE e_ucomm.
-      WHEN 'XXX'.
+      WHEN '&APPROVE'.
+        app->approve_po( ).
+      WHEN '&REJECT'.
+        app->reject_po( ).
     ENDCASE.
+  ENDMETHOD.
+
+  METHOD approve_po.
+    LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) WHERE selkz = abap_true.
+      UPDATE zgkc_po_t
+      SET status = '02'
+      WHERE ebeln = <fs_outdat>-ebeln.
+
+      <fs_outdat>-light = '@08@'.
+      <fs_outdat>-status = '02'.
+    ENDLOOP.
+
+    MESSAGE 'Approved the selected purchase order(s) successfully.' TYPE 'I'.
+    app->refresh_alv( ).
+  ENDMETHOD.
+
+  METHOD reject_po.
+    LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) WHERE selkz = abap_true.
+      UPDATE zgkc_po_t
+      SET status = '03'
+      WHERE ebeln = <fs_outdat>-ebeln.
+
+      <fs_outdat>-light = '@0A@'.
+      <fs_outdat>-status = '03'.
+    ENDLOOP.
+
+    MESSAGE 'Rejected the selected purchase order(s) successfully.' TYPE 'I'.
+    app->refresh_alv( ).
   ENDMETHOD.
 ENDCLASS.
