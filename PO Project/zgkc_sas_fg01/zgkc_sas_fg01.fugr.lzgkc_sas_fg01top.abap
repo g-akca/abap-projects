@@ -7,3 +7,5 @@ DATA mo_application TYPE REF TO lcl_application.
 
 TABLES: zgkc_po_item,
         zgkc_po_key.
+
+DATA: mt_exclude TYPE TABLE OF sy-ucomm.

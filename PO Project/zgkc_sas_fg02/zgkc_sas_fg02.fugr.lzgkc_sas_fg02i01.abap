@@ -15,6 +15,13 @@ MODULE user_command_0100 INPUT.
     WHEN '&AA'.
       CALL TRANSACTION 'ZGKC_PM04'.
     WHEN '&UMT'.
-
+      CALL FUNCTION 'VIEW_MAINTENANCE_CALL'
+        EXPORTING
+          action    = 'U'
+          view_name = 'ZGKC_APPROVER_T'.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+          WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4 RAISING contains_error.
+      ENDIF.
   ENDCASE.
 ENDMODULE.

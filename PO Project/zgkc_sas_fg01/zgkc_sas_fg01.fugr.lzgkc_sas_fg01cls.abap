@@ -70,7 +70,13 @@ CLASS lcl_application DEFINITION.
       send_to_approval,
       send_email
         IMPORTING
-          iv_ebeln TYPE ebeln.
+          iv_ebeln TYPE ebeln,
+      set_mailbody
+        IMPORTING
+          iv_ebeln          TYPE ebeln
+        RETURNING
+          VALUE(rt_mailtab) TYPE soli_tab,
+      after_send.
 
   PRIVATE SECTION.
     CONSTANTS:
@@ -385,10 +391,17 @@ CLASS lcl_application IMPLEMENTATION.
 
   METHOD clear_screen.
     FREE: mt_outdat, zgkc_po_item.
+    LOOP AT SCREEN.
+      CASE screen-group1.
+        WHEN 'DIS'.
+          screen-input = 1.
+      ENDCASE.
+      MODIFY SCREEN.
+    ENDLOOP.
   ENDMETHOD.
 
   METHOD send_to_approval.
-    " optimize this part
+    " Optimize this part!
     IF mt_outdat IS NOT INITIAL.
       FREE: ms_po.
       CALL FUNCTION 'NUMBER_GET_NEXT'
@@ -406,6 +419,7 @@ CLASS lcl_application IMPLEMENTATION.
       ms_po-ernam = zgkc_po_item-uname.
       INSERT INTO zgkc_po_t VALUES ms_po.
 
+      " Optimize this part!
       LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
         ms_item-ebeln = ms_po-ebeln.
         ms_item-ebelp = <fs_outdat>-ebelp.
@@ -426,6 +440,7 @@ CLASS lcl_application IMPLEMENTATION.
       ).
 
       app->clear_screen( ).
+      zgkc_po_item-ebeln = ms_po-ebeln.
       MESSAGE 'Purchase Order has been sent to approval.' TYPE 'I' DISPLAY LIKE 'S'.
     ELSE.
       MESSAGE 'Please add items to the Purchase Order.' TYPE 'I' DISPLAY LIKE 'E'.
@@ -433,6 +448,138 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD send_email.
+    DATA: lo_send_request TYPE REF TO cl_bcs,
+          lo_document     TYPE REF TO cl_document_bcs,
+          lo_sender       TYPE REF TO if_sender_bcs,
+          lo_recipient    TYPE REF TO if_recipient_bcs,
+          lo_recipient_cc TYPE REF TO if_recipient_bcs,
+          lt_mailtab      TYPE soli_tab,
+          lv_rec          TYPE ad_smtpadr,
+          lv_cc           TYPE ad_smtpadr,
+          lv_subject      TYPE sood-objdes,
+          lv_result       TYPE os_boolean,
+          lv_size         TYPE i,
+          lt_solix        TYPE solix_tab.
 
+    TRY.
+        IF lo_send_request IS BOUND.
+          FREE lo_send_request.
+        ENDIF.
+
+        lo_send_request = cl_bcs=>create_persistent( ).
+
+        TRY.
+            CALL METHOD cl_cam_address_bcs=>create_internet_address
+              EXPORTING
+                i_address_string = 'gok.akca@hotmail.com'
+                "i_address_name   = 'Gökçe Akca'
+              RECEIVING
+                result           = lo_sender.
+
+            lo_send_request->set_sender( i_sender = lo_sender ).
+
+            lo_recipient = cl_cam_address_bcs=>create_internet_address( 'gok.akca66@gmail.com' ).
+            lo_send_request->add_recipient(
+              EXPORTING
+                i_recipient = lo_recipient
+                i_express   = abap_true ).
+
+          CATCH cx_address_bcs.
+          CATCH cx_root.
+        ENDTRY.
+
+        lv_subject = TEXT-m01.
+        lt_mailtab = set_mailbody(
+          EXPORTING
+            iv_ebeln = iv_ebeln
+         ).
+
+        lo_document = cl_document_bcs=>create_document(
+                    i_type       = 'HTM'
+                    i_importance = '5'
+                    i_text       = lt_mailtab
+                    i_subject    = lv_subject ).
+
+        lo_send_request->set_document( lo_document ).
+        lo_send_request->set_send_immediately( 'X' ).
+        lv_result = lo_send_request->send( i_with_error_screen = 'X' ).
+
+        IF lv_result IS INITIAL.
+          MESSAGE e001(00) WITH 'Mail couldn''''t be sent!'.
+        ELSE.
+          MESSAGE s001(00) WITH 'Mail was sent successfully!'.
+          COMMIT WORK AND WAIT.
+        ENDIF.
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD set_mailbody.
+    DEFINE add_line.
+      APPEND &1 TO rt_mailtab.
+    END-OF-DEFINITION.
+
+    add_line:
+      TEXT-m01, " New Purchase Entry
+      '<br>',
+      '<br>',
+      TEXT-m02. " Dear Manager,
+
+    rt_mailtab = VALUE #( BASE rt_mailtab
+        ( line = |A purchase entry has been made with the PO Document Number { iv_ebeln }.| )
+    ).
+
+    add_line:
+      TEXT-m03, " It is awaiting your approval.
+      TEXT-m04, " For your information.
+      '<br>',
+      '<br>',
+      '<br>',
+      '<br>',
+      '<table border="1" style="border-collapse: collapse; width: auto; font-size: 12px; color: #333;">',
+      '<tr>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Document Number</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Item</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Material ID</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Material</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Quantity</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">UoM</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Material Type</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Goods Group</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Price</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Currency</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Company Code</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Total Price</th>',
+      '</tr>'.
+    LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
+      rt_mailtab = VALUE #( BASE rt_mailtab
+        ( line = '<tr>' )
+        ( line = |<td style="padding: 8px; width: auto; ">{ iv_ebeln }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-ebelp }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-matnr }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-maktx }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-menge }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-meins }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-mtart }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-matkl }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-wrbtr }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-waers }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-bukrs }</td>| )
+        ( line = |<td style="padding: 8px; width: auto; ">{ <fs_outdat>-wrbtr_sum }</td>| )
+        ( line = |</tr>| ) ).
+    ENDLOOP.
+    add_line: '</table>'.
+
+  ENDMETHOD.
+
+  METHOD after_send.
+    IF zgkc_po_item-ebeln IS NOT INITIAL AND zgkc_po_item-ebeln <> '$000000000'.
+      LOOP AT SCREEN.
+        CASE screen-group1.
+          WHEN 'DIS'.
+            screen-input = 0.
+        ENDCASE.
+        MODIFY SCREEN.
+      ENDLOOP.
+    ENDIF.
   ENDMETHOD.
 ENDCLASS.

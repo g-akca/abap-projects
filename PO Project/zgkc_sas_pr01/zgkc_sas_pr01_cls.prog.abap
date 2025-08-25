@@ -28,7 +28,6 @@ CLASS lcl_application DEFINITION.
 
     METHODS:
       initialization,
-      at_selection_screen,
       start_of_selection,
       retrieve_dat
         IMPORTING
@@ -87,7 +86,15 @@ CLASS lcl_application DEFINITION.
         IMPORTING
           e_ucomm,
       approve_po,
-      reject_po.
+      reject_po,
+      send_email
+        IMPORTING
+          iv_ebeln TYPE ebeln,
+      set_mailbody
+        IMPORTING
+          iv_ebeln          TYPE ebeln
+        RETURNING
+          VALUE(rt_mailtab) TYPE soli_tab.
 
   PRIVATE SECTION.
     CONSTANTS:
@@ -106,10 +113,7 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD initialization.
-    CONCATENATE ICON_VARIANTS '' INTO SSCRFIELDS-FUNCTXT_01.
-  ENDMETHOD.
-
-  METHOD at_selection_screen.
+    CONCATENATE icon_variants '' INTO sscrfields-functxt_01.
   ENDMETHOD.
 
   METHOD start_of_selection.
@@ -130,28 +134,30 @@ CLASS lcl_application IMPLEMENTATION.
         ENDIF.
 
         CALL SCREEN 0100.
-      ENDCASE.
+    ENDCASE.
   ENDMETHOD.
 
   METHOD retrieve_dat.
     FREE: mt_outdat.
     SELECT *
       FROM zgkc_po_t
-      WHERE bukrs = @p_bukrs AND ebeln IN @s_ebeln AND erdat IN @s_erdat AND ernam IN @s_ernam
+      WHERE bukrs = @p_bukrs AND ebeln IN @s_ebeln AND erdat IN @s_erdat AND ernam IN @s_ernam AND status = '01'
       INTO CORRESPONDING FIELDS OF TABLE @mt_outdat.
     IF sy-subrc <> 0.
       MESSAGE 'Couldn''''t find any purchase orders with this criteria.' TYPE 'I' RAISING no_orders.
     ENDIF.
 
+    SELECT SINGLE *
+      FROM zgkc_approver_t
+      WHERE bukrs = @p_bukrs AND uname = @sy-uname AND active = @abap_true
+      INTO @DATA(test).
+    IF sy-subrc <> 0.
+      MESSAGE 'Couldn''''t find any purchase orders waiting for your approval.' TYPE 'I' RAISING no_orders.
+    ENDIF.
+
     LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
       <fs_outdat>-msgshw = icon_message_faulty_orphan.
-      IF <fs_outdat>-status = '01'.
-        <fs_outdat>-light = '@09@'.
-      ELSEIF <fs_outdat>-status = '02'.
-        <fs_outdat>-light = '@08@'.
-      ELSEIF <fs_outdat>-status = '03'.
-        <fs_outdat>-light = '@0A@'.
-      ENDIF.
+      <fs_outdat>-light = '@09@'.
     ENDLOOP.
   ENDMETHOD.
 
@@ -540,12 +546,22 @@ CLASS lcl_application IMPLEMENTATION.
 
   METHOD approve_po.
     LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) WHERE selkz = abap_true.
+      IF <fs_outdat>-status <> '01'.
+        MESSAGE 'Can''''t approve already approved or rejected orders.' TYPE 'I'.
+        RETURN.
+      ENDIF.
+
       UPDATE zgkc_po_t
-      SET status = '02'
+      SET status = '03'
       WHERE ebeln = <fs_outdat>-ebeln.
 
       <fs_outdat>-light = '@08@'.
-      <fs_outdat>-status = '02'.
+      <fs_outdat>-status = '03'.
+
+      app->send_email(
+        EXPORTING
+          iv_ebeln = <fs_outdat>-ebeln
+      ).
     ENDLOOP.
 
     MESSAGE 'Approved the selected purchase order(s) successfully.' TYPE 'I'.
@@ -553,16 +569,130 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD reject_po.
-    LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) WHERE selkz = abap_true.
-      UPDATE zgkc_po_t
-      SET status = '03'
-      WHERE ebeln = <fs_outdat>-ebeln.
+    DATA: lv_ans(1).
 
-      <fs_outdat>-light = '@0A@'.
-      <fs_outdat>-status = '03'.
-    ENDLOOP.
+    CALL FUNCTION 'POPUP_TO_CONFIRM'
+      EXPORTING
+        titlebar              = 'Reject'
+        text_question         = 'Selected purchase orders will be rejected, are you sure?'
+        text_button_1         = 'Reject'
+        icon_button_1         = 'ICON_CHECKED'
+        text_button_2         = 'Cancel'
+        icon_button_2         = 'ICON_CANCEL'
+        default_button        = '1'
+        display_cancel_button = ' '
+        popup_type            = 'ICON_MESSAGE_ERROR'
+      IMPORTING
+        answer                = lv_ans.
 
-    MESSAGE 'Rejected the selected purchase order(s) successfully.' TYPE 'I'.
-    app->refresh_alv( ).
+    IF lv_ans EQ '1'.
+      LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) WHERE selkz = abap_true.
+        IF <fs_outdat>-status <> '01'.
+          MESSAGE 'Can''''t reject already approved or rejected orders.' TYPE 'I'.
+          RETURN.
+        ENDIF.
+
+        UPDATE zgkc_po_t
+        SET status = '02'
+        WHERE ebeln = <fs_outdat>-ebeln.
+
+        <fs_outdat>-light = '@0A@'.
+        <fs_outdat>-status = '02'.
+      ENDLOOP.
+
+      MESSAGE 'Rejected the selected purchase order(s) successfully.' TYPE 'I'.
+      app->refresh_alv( ).
+    ENDIF.
+  ENDMETHOD.
+
+  METHOD send_email.
+    DATA: lo_send_request TYPE REF TO cl_bcs,
+          lo_document     TYPE REF TO cl_document_bcs,
+          lo_sender       TYPE REF TO if_sender_bcs,
+          lo_recipient    TYPE REF TO if_recipient_bcs,
+          lo_recipient_cc TYPE REF TO if_recipient_bcs,
+          lt_mailtab      TYPE soli_tab,
+          lv_rec          TYPE ad_smtpadr,
+          lv_cc           TYPE ad_smtpadr,
+          lv_subject      TYPE sood-objdes,
+          lv_result       TYPE os_boolean,
+          lv_size         TYPE so_obj_len,
+          lt_solix        TYPE solix_tab.
+
+    TRY.
+        IF lo_send_request IS BOUND.
+          FREE lo_send_request.
+        ENDIF.
+
+        lo_send_request = cl_bcs=>create_persistent( ).
+
+        TRY.
+            CALL METHOD cl_cam_address_bcs=>create_internet_address
+              EXPORTING
+                i_address_string = 'gok.akca@hotmail.com'
+                "i_address_name   = 'Gökçe Akca'
+              RECEIVING
+                result           = lo_sender.
+
+            lo_send_request->set_sender( i_sender = lo_sender ).
+
+            lo_recipient = cl_cam_address_bcs=>create_internet_address( 'gok.akca66@gmail.com' ).
+            lo_send_request->add_recipient(
+              EXPORTING
+                i_recipient = lo_recipient
+                i_express   = abap_true ).
+
+          CATCH cx_address_bcs.
+          CATCH cx_root.
+        ENDTRY.
+
+        lv_subject = TEXT-m01.
+        lt_mailtab = set_mailbody(
+          EXPORTING
+            iv_ebeln = iv_ebeln
+         ).
+
+        lo_document = cl_document_bcs=>create_document(
+                    i_type       = 'HTM'
+                    i_importance = '5'
+                    i_text       = lt_mailtab
+                    i_subject    = lv_subject ).
+
+        lo_send_request->set_document( lo_document ).
+
+        " Add attachment
+
+        lo_send_request->set_send_immediately( 'X' ).
+        lv_result = lo_send_request->send( i_with_error_screen = 'X' ).
+
+        IF lv_result IS INITIAL.
+          MESSAGE e001(00) WITH 'Mail couldn''''t be sent!'.
+        ELSE.
+          MESSAGE s001(00) WITH 'Mail was sent successfully!'.
+          COMMIT WORK AND WAIT.
+        ENDIF.
+    ENDTRY.
+  ENDMETHOD.
+
+  METHOD set_mailbody.
+    DEFINE add_line.
+      APPEND &1 TO rt_mailtab.
+    END-OF-DEFINITION.
+
+    add_line:
+      TEXT-m01, " Purchase Entry Approval
+      '<br>',
+      '<br>',
+      TEXT-m02. " Dear Accounting Manager,
+
+    rt_mailtab = VALUE #( BASE rt_mailtab
+        ( line = |The purchase entry with the PO Document Number { iv_ebeln } has been approved.| )
+    ).
+
+    add_line:
+      TEXT-m03, " It is awaiting your approval for purchase.
+      TEXT-m04, " For your information.
+      '<br>'.
+
   ENDMETHOD.
 ENDCLASS.
