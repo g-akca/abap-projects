@@ -5,13 +5,8 @@
 CLASS lcl_application DEFINITION DEFERRED.
 DATA: mo_application TYPE REF TO lcl_application.
 
-TABLES: SSCRFIELDS.
-TYPE-POOLS: ICON.
-
-SELECTION-SCREEN: FUNCTION KEY 1.
-
 SELECTION-SCREEN BEGIN OF BLOCK selection WITH FRAME TITLE TEXT-001.
-PARAMETERS: p_bukrs TYPE bukrs.
+PARAMETERS: p_bukrs TYPE bukrs OBLIGATORY.
 
 DATA: gv_ebeln TYPE ebeln,
       gv_erdat TYPE erdat,

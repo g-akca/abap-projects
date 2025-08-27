@@ -29,4 +29,6 @@ CLASS lcl_application IMPLEMENTATION.
   METHOD initialization.
 
   ENDMETHOD.
+
+
 ENDCLASS.

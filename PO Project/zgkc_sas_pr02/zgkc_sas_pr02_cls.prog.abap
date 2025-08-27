@@ -22,7 +22,7 @@ CLASS lcl_application DEFINITION.
       mt_fieldcat    TYPE lvc_t_fcat.
 
     DATA:
-      mt_outdat TYPE TABLE OF zgkc_poitem_s.
+      mt_outdat TYPE TABLE OF zgkc_po_s2.
 
     METHODS:
       initialization,
@@ -86,11 +86,14 @@ CLASS lcl_application DEFINITION.
       display_top_of_page
         IMPORTING
           dg_dyndoc_id TYPE REF TO cl_dd_document,
-      send_to_bank.
+      send_to_bank,
+      create_txt
+        IMPORTING
+          ms_outdat TYPE zgkc_po_s2.
 
   PRIVATE SECTION.
     CONSTANTS:
-      mc_strname TYPE tabname VALUE 'zgkc_poitem_s'.
+      mc_strname TYPE tabname VALUE 'zgkc_po_s2'.
 
 ENDCLASS.
 
@@ -123,10 +126,11 @@ CLASS lcl_application IMPLEMENTATION.
 
   METHOD retrieve_dat.
     FREE: mt_outdat.
-    SELECT *
-      FROM zgkc_item_t AS item
-      JOIN zgkc_po_t AS po ON item~ebeln = po~ebeln
+    SELECT po~ebeln, po~status, po~waers, SUM( item~wrbtr_sum ) AS wrbtr, po~erdat, po~ernam, po~erzet
+      FROM zgkc_po_t AS po
+      JOIN zgkc_item_t AS item ON item~ebeln = po~ebeln
       WHERE po~bukrs = @p_bukrs AND item~ebeln IN @s_ebeln AND po~erdat IN @s_erdat AND po~ernam IN @s_ernam AND po~status = '03'
+      GROUP BY po~ebeln, po~status, po~waers, po~erdat, po~ernam, po~erzet
       INTO CORRESPONDING FIELDS OF TABLE @mt_outdat.
     IF sy-subrc <> 0.
       MESSAGE 'Couldn''''t find any approved purchase orders with this criteria.' TYPE 'I' RAISING no_orders.
@@ -543,21 +547,30 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD send_to_bank.
-*    LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) WHERE selkz = abap_true.
-*      IF <fs_outdat>-status <> '03'.
-*        MESSAGE 'Can''''t send orders already sent to bank.' TYPE 'I'.
-*        RETURN.
-*      ENDIF.
-*
-*      UPDATE zgkc_po_t
-*      SET status = '04'
-*      WHERE ebeln = <fs_outdat>-ebeln.
-*
-*      <fs_outdat>-light = '@08@'.
-*      <fs_outdat>-status = '04'.
-*    ENDLOOP.
-*
-*    MESSAGE 'Sent the selected item(s) to bank successfully.' TYPE 'I'.
-*    app->refresh_alv( ).
+    LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) WHERE selkz = abap_true.
+      IF <fs_outdat>-status <> '03'.
+        MESSAGE 'Can''''t send orders already sent to bank.' TYPE 'I'.
+        RETURN.
+      ENDIF.
+
+      app->create_txt(
+        EXPORTING
+          ms_outdat = <fs_outdat>
+      ).
+
+      UPDATE zgkc_po_t
+      SET status = '04'
+      WHERE ebeln = <fs_outdat>-ebeln.
+
+      <fs_outdat>-light = '@08@'.
+      <fs_outdat>-status = '04'.
+    ENDLOOP.
+
+    MESSAGE 'Sent the selected item(s) to bank successfully.' TYPE 'I'.
+    app->refresh_alv( ).
+  ENDMETHOD.
+
+  METHOD create_txt.
+
   ENDMETHOD.
 ENDCLASS.

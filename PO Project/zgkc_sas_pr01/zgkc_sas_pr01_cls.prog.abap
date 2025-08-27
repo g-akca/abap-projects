@@ -113,28 +113,22 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD initialization.
-    CONCATENATE icon_variants '' INTO sscrfields-functxt_01.
   ENDMETHOD.
 
   METHOD start_of_selection.
-    CASE sscrfields-ucomm.
-      WHEN 'FC01'.
-        " whatever this button does
-      WHEN OTHERS.
-        app->retrieve_dat(
-          EXPORTING
-            iv_bukrs = p_bukrs
-          EXCEPTIONS
-            contains_error = 1
-            no_orders      = 2
-            OTHERS         = 3 ).
-        IF sy-subrc <> 0.
-          MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-            WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4. RETURN.
-        ENDIF.
+    app->retrieve_dat(
+      EXPORTING
+        iv_bukrs = p_bukrs
+      EXCEPTIONS
+        contains_error = 1
+        no_orders      = 2
+        OTHERS         = 3 ).
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4. RETURN.
+    ENDIF.
 
-        CALL SCREEN 0100.
-    ENDCASE.
+    CALL SCREEN 0100.
   ENDMETHOD.
 
   METHOD retrieve_dat.
@@ -551,17 +545,17 @@ CLASS lcl_application IMPLEMENTATION.
         RETURN.
       ENDIF.
 
+      app->send_email(
+        EXPORTING
+          iv_ebeln = <fs_outdat>-ebeln
+      ).
+
       UPDATE zgkc_po_t
       SET status = '03'
       WHERE ebeln = <fs_outdat>-ebeln.
 
       <fs_outdat>-light = '@08@'.
       <fs_outdat>-status = '03'.
-
-      app->send_email(
-        EXPORTING
-          iv_ebeln = <fs_outdat>-ebeln
-      ).
     ENDLOOP.
 
     MESSAGE 'Approved the selected purchase order(s) successfully.' TYPE 'I'.
@@ -661,6 +655,36 @@ CLASS lcl_application IMPLEMENTATION.
         lo_send_request->set_document( lo_document ).
 
         " Add attachment
+        DATA: lv_fm TYPE rs38l_fnam.
+
+        SELECT SINGLE waers
+          FROM zgkc_po_t
+          WHERE ebeln = @iv_ebeln
+          INTO @DATA(lv_waers).
+
+        app->retrieve_dat2(
+            EXPORTING
+              iv_ebeln = iv_ebeln
+            EXCEPTIONS
+              contains_error = 1
+              OTHERS         = 2 ).
+          IF sy-subrc <> 0.
+            MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4. RETURN.
+          ENDIF.
+
+        CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+          EXPORTING
+            formname = 'ZGKC_SAS_SF'
+          IMPORTING
+            fm_name  = lv_fm.
+
+        CALL FUNCTION lv_fm
+          EXPORTING
+            iv_ebeln = iv_ebeln
+            iv_waers = lv_waers
+          TABLES
+            mt_itemdat = mt_outdat2.
 
         lo_send_request->set_send_immediately( 'X' ).
         lv_result = lo_send_request->send( i_with_error_screen = 'X' ).

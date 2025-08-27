@@ -23,7 +23,7 @@ CLASS lcl_application DEFINITION.
       mt_fieldcat    TYPE lvc_t_fcat.
 
     DATA:
-      mt_outdat TYPE zgkc_po_item_tt,
+      mt_outdat TYPE TABLE OF zgkc_po_item,
       ms_item   TYPE zgkc_item_t,
       ms_po     TYPE zgkc_po_t.
 
