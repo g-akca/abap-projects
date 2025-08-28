@@ -16,3 +16,9 @@ SELECT-OPTIONS: s_ebeln FOR gv_ebeln,
                 s_erdat FOR gv_erdat,
                 s_ernam FOR gv_ernam.
 SELECTION-SCREEN END OF BLOCK selection.
+
+SELECTION-SCREEN BEGIN OF BLOCK selection2 WITH FRAME TITLE TEXT-002.
+PARAMETERS: p_yellow  AS CHECKBOX DEFAULT 'X',
+            p_green AS CHECKBOX,
+            p_red    AS CHECKBOX.
+SELECTION-SCREEN END OF BLOCK selection2.

@@ -70,13 +70,18 @@ CLASS lcl_application DEFINITION.
       send_to_approval,
       send_email
         IMPORTING
-          iv_ebeln TYPE ebeln,
+          iv_ebeln         TYPE ebeln
+        RETURNING
+          VALUE(rt_msgdat) TYPE bapiret2_tab,
       set_mailbody
         IMPORTING
           iv_ebeln          TYPE ebeln
         RETURNING
           VALUE(rt_mailtab) TYPE soli_tab,
-      after_send.
+      after_send,
+      show_message
+        IMPORTING
+          it_msgdat TYPE bapiret2_tab.
 
   PRIVATE SECTION.
     CONSTANTS:
@@ -401,7 +406,6 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD send_to_approval.
-    " Optimize this part!
     IF mt_outdat IS NOT INITIAL.
       FREE: ms_po.
       CALL FUNCTION 'NUMBER_GET_NEXT'
@@ -419,7 +423,6 @@ CLASS lcl_application IMPLEMENTATION.
       ms_po-ernam = zgkc_po_item-uname.
       INSERT INTO zgkc_po_t VALUES ms_po.
 
-      " Optimize this part!
       LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
         ms_item-ebeln = ms_po-ebeln.
         ms_item-ebelp = <fs_outdat>-ebelp.
@@ -434,10 +437,14 @@ CLASS lcl_application IMPLEMENTATION.
         INSERT INTO zgkc_item_t VALUES ms_item.
       ENDLOOP.
 
-      app->send_email(
-        EXPORTING
-          iv_ebeln = ms_po-ebeln
-      ).
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK.
+        app->show_message(
+          EXPORTING
+            it_msgdat = app->send_email(
+              EXPORTING
+                iv_ebeln = <fs_outdat>-ebeln ) ).
+      ENDIF.
 
       app->clear_screen( ).
       zgkc_po_item-ebeln = ms_po-ebeln.
@@ -581,5 +588,11 @@ CLASS lcl_application IMPLEMENTATION.
         MODIFY SCREEN.
       ENDLOOP.
     ENDIF.
+  ENDMETHOD.
+
+  METHOD show_message.
+    CALL FUNCTION 'FINB_BAPIRET2_DISPLAY'
+      EXPORTING
+        it_message = it_msgdat[].
   ENDMETHOD.
 ENDCLASS.

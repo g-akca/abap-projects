@@ -69,7 +69,7 @@ CLASS lcl_application DEFINITION.
       handle_hotspot_click FOR EVENT hotspot_click OF cl_gui_alv_grid
         IMPORTING
           e_column_id
-          es_row_no,
+          e_row_id,
       handle_toolbar_set FOR EVENT toolbar OF cl_gui_alv_grid
         IMPORTING
           e_object
@@ -129,10 +129,18 @@ CLASS lcl_application IMPLEMENTATION.
     SELECT po~ebeln, po~status, po~waers, SUM( item~wrbtr_sum ) AS wrbtr, po~erdat, po~ernam, po~erzet
       FROM zgkc_po_t AS po
       JOIN zgkc_item_t AS item ON item~ebeln = po~ebeln
-      WHERE po~bukrs = @p_bukrs AND item~ebeln IN @s_ebeln AND po~erdat IN @s_erdat AND po~ernam IN @s_ernam AND po~status = '03'
+      WHERE po~bukrs = @p_bukrs AND item~ebeln IN @s_ebeln AND po~erdat IN @s_erdat AND po~ernam IN @s_ernam AND ( po~status = '03' OR po~status = '04' )
       GROUP BY po~ebeln, po~status, po~waers, po~erdat, po~ernam, po~erzet
+      ORDER BY po~ebeln
       INTO CORRESPONDING FIELDS OF TABLE @mt_outdat.
-    IF sy-subrc <> 0.
+
+    IF p_green <> 'X'.
+      DELETE mt_outdat WHERE status = '04'.
+    ENDIF.
+    IF p_yellow <> 'X'.
+      DELETE mt_outdat WHERE status = '03'.
+    ENDIF.
+    IF mt_outdat IS INITIAL.
       MESSAGE 'Couldn''''t find any approved purchase orders with this criteria.' TYPE 'I' RAISING no_orders.
     ENDIF.
 
@@ -143,8 +151,12 @@ CLASS lcl_application IMPLEMENTATION.
 
     LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
       <fs_outdat>-msgshw = icon_message_faulty_orphan.
-      <fs_outdat>-light = '@09@'.
       <fs_outdat>-iban = lv_iban.
+      IF <fs_outdat>-status = '03'.
+        <fs_outdat>-light = '@09@'.
+      ELSEIF <fs_outdat>-status = '04'.
+        <fs_outdat>-light = '@08@'.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
@@ -390,7 +402,10 @@ CLASS lcl_application IMPLEMENTATION.
   METHOD handle_hotspot_click.
     CASE e_column_id.
       WHEN 'MSGHSW'.
-
+        READ TABLE mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) INDEX e_row_id.
+        IF sy-subrc = 0 AND <fs_outdat>-msgdat[] IS NOT INITIAL.
+          cl_rmsl_message=>display( <fs_outdat>-msgdat ).
+        ENDIF.
     ENDCASE.
   ENDMETHOD.
 
@@ -571,6 +586,38 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD create_txt.
+    DATA: lv_filename TYPE string,
+          lv_fullpath TYPE string.
 
+    DATA: lt_data TYPE TABLE OF string,
+          ls_data TYPE string.
+
+    APPEND |Documenting Number: { ms_outdat-ebeln }, Total Price: { ms_outdat-wrbtr }, Currency: { ms_outdat-waers }, IBAN: { ms_outdat-iban }, Creation Date: { ms_outdat-erdat }, Time: { ms_outdat-erzet }, Creator: { ms_outdat-ernam }| TO lt_data.
+    DATA: mt_itemdat TYPE TABLE OF zgkc_item_t.
+
+    SELECT *
+      FROM zgkc_item_t
+      WHERE ebeln = @ms_outdat-ebeln
+      INTO CORRESPONDING FIELDS OF TABLE @mt_itemdat.
+
+    LOOP AT mt_itemdat ASSIGNING FIELD-SYMBOL(<ms_itemdat>).
+      APPEND |Item: { <ms_itemdat>-ebelp }, Material ID: { <ms_itemdat>-matnr }, Material: { <ms_itemdat>-maktx }, Quantity: { <ms_itemdat>-menge }, UoM: { <ms_itemdat>-meins }, Material Type: { <ms_itemdat>-mtart }, | && |Goods Group: {
+<ms_itemdat>-matkl }, Price: { <ms_itemdat>-wrbtr }, Total Price: { <ms_itemdat>-wrbtr_sum }| TO lt_data.
+    ENDLOOP.
+
+    lv_filename = |{ sy-datum }_{ sy-uzeit }_{ ms_outdat-ebeln }.txt|.
+    lv_fullpath = '/usr/sap/DIR_BANKA/' && lv_filename.
+
+    OPEN DATASET lv_fullpath FOR OUTPUT IN TEXT MODE ENCODING DEFAULT.
+    IF sy-subrc <> 0.
+      MESSAGE 'Error opening file' TYPE 'E'.
+      EXIT.
+    ENDIF.
+
+    LOOP AT lt_data INTO ls_data.
+      TRANSFER ls_data TO lv_fullpath.
+    ENDLOOP.
+
+    CLOSE DATASET lv_fullpath.
   ENDMETHOD.
 ENDCLASS.

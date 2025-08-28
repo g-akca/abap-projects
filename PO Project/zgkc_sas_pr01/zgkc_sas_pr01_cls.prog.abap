@@ -26,6 +26,27 @@ CLASS lcl_application DEFINITION.
       mt_outdat2 TYPE TABLE OF zgkc_item_s,
       ms_outdat2 TYPE zgkc_item_s.
 
+    DATA:
+      lo_send_request TYPE REF TO cl_bcs,
+      lo_document     TYPE REF TO cl_document_bcs,
+      lo_sender       TYPE REF TO if_sender_bcs,
+      lo_recipient    TYPE REF TO if_recipient_bcs,
+      lo_recipient_cc TYPE REF TO if_recipient_bcs,
+      lt_mailtab      TYPE soli_tab,
+      lv_rec          TYPE ad_smtpadr,
+      lv_cc           TYPE ad_smtpadr,
+      lv_subject      TYPE sood-objdes,
+      lv_result       TYPE os_boolean,
+      lv_size         TYPE so_obj_len,
+      lt_solix        TYPE solix_tab,
+      lv_fm           TYPE rs38l_fnam,
+      ls_ctrlop       TYPE ssfctrlop,
+      ls_outopt       TYPE ssfcompop,
+      lv_bin_xstr     TYPE xstring,
+      lt_otfdata      TYPE ssfcrescl,
+      lt_otf          TYPE STANDARD TABLE OF itcoo,
+      lt_pdf_tab      TYPE STANDARD TABLE OF tline.
+
     METHODS:
       initialization,
       start_of_selection,
@@ -89,12 +110,20 @@ CLASS lcl_application DEFINITION.
       reject_po,
       send_email
         IMPORTING
-          iv_ebeln TYPE ebeln,
+          iv_ebeln         TYPE ebeln
+        RETURNING
+          VALUE(rt_msgdat) TYPE bapiret2_tab,
       set_mailbody
         IMPORTING
           iv_ebeln          TYPE ebeln
         RETURNING
-          VALUE(rt_mailtab) TYPE soli_tab.
+          VALUE(rt_mailtab) TYPE soli_tab,
+      add_attachment
+        IMPORTING
+          iv_ebeln TYPE ebeln,
+      show_message
+        IMPORTING
+          it_msgdat TYPE bapiret2_tab.
 
   PRIVATE SECTION.
     CONSTANTS:
@@ -135,9 +164,20 @@ CLASS lcl_application IMPLEMENTATION.
     FREE: mt_outdat.
     SELECT *
       FROM zgkc_po_t
-      WHERE bukrs = @p_bukrs AND ebeln IN @s_ebeln AND erdat IN @s_erdat AND ernam IN @s_ernam AND status = '01'
+      WHERE bukrs = @p_bukrs AND ebeln IN @s_ebeln AND erdat IN @s_erdat AND ernam IN @s_ernam AND ( status = '01' OR status = '02' OR status = '03' OR status = '04' )
+      ORDER BY ebeln
       INTO CORRESPONDING FIELDS OF TABLE @mt_outdat.
-    IF sy-subrc <> 0.
+
+    IF p_green <> 'X'.
+      DELETE mt_outdat WHERE status = '03' OR status = '04'.
+    ENDIF.
+    IF p_yellow <> 'X'.
+      DELETE mt_outdat WHERE status = '01'.
+    ENDIF.
+    IF p_red <> 'X'.
+      DELETE mt_outdat WHERE status = '02'.
+    ENDIF.
+    IF mt_outdat IS INITIAL.
       MESSAGE 'Couldn''''t find any purchase orders with this criteria.' TYPE 'I' RAISING no_orders.
     ENDIF.
 
@@ -151,7 +191,13 @@ CLASS lcl_application IMPLEMENTATION.
 
     LOOP AT mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>).
       <fs_outdat>-msgshw = icon_message_faulty_orphan.
-      <fs_outdat>-light = '@09@'.
+      IF <fs_outdat>-status = '01'.
+        <fs_outdat>-light = '@09@'.
+      ELSEIF <fs_outdat>-status = '02'.
+        <fs_outdat>-light = '@0A@'.
+      ELSE.
+        <fs_outdat>-light = '@08@'.
+      ENDIF.
     ENDLOOP.
   ENDMETHOD.
 
@@ -481,7 +527,10 @@ CLASS lcl_application IMPLEMENTATION.
           app->refresh_alv2( ).
         ENDIF.
       WHEN 'MSGSHW'.
-        "show error messages
+        READ TABLE mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) INDEX e_row_id.
+        IF sy-subrc = 0 AND <fs_outdat>-msgdat[] IS NOT INITIAL.
+          cl_rmsl_message=>display( <fs_outdat>-msgdat ).
+        ENDIF.
     ENDCASE.
   ENDMETHOD.
 
@@ -545,14 +594,17 @@ CLASS lcl_application IMPLEMENTATION.
         RETURN.
       ENDIF.
 
-      app->send_email(
-        EXPORTING
-          iv_ebeln = <fs_outdat>-ebeln
-      ).
-
       UPDATE zgkc_po_t
       SET status = '03'
       WHERE ebeln = <fs_outdat>-ebeln.
+      IF sy-subrc IS INITIAL.
+        COMMIT WORK.
+        app->show_message(
+          EXPORTING
+            it_msgdat = app->send_email(
+              EXPORTING
+                iv_ebeln = <fs_outdat>-ebeln ) ).
+      ENDIF.
 
       <fs_outdat>-light = '@08@'.
       <fs_outdat>-status = '03'.
@@ -600,19 +652,6 @@ CLASS lcl_application IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD send_email.
-    DATA: lo_send_request TYPE REF TO cl_bcs,
-          lo_document     TYPE REF TO cl_document_bcs,
-          lo_sender       TYPE REF TO if_sender_bcs,
-          lo_recipient    TYPE REF TO if_recipient_bcs,
-          lo_recipient_cc TYPE REF TO if_recipient_bcs,
-          lt_mailtab      TYPE soli_tab,
-          lv_rec          TYPE ad_smtpadr,
-          lv_cc           TYPE ad_smtpadr,
-          lv_subject      TYPE sood-objdes,
-          lv_result       TYPE os_boolean,
-          lv_size         TYPE so_obj_len,
-          lt_solix        TYPE solix_tab.
-
     TRY.
         IF lo_send_request IS BOUND.
           FREE lo_send_request.
@@ -654,37 +693,10 @@ CLASS lcl_application IMPLEMENTATION.
 
         lo_send_request->set_document( lo_document ).
 
-        " Add attachment
-        DATA: lv_fm TYPE rs38l_fnam.
-
-        SELECT SINGLE waers
-          FROM zgkc_po_t
-          WHERE ebeln = @iv_ebeln
-          INTO @DATA(lv_waers).
-
-        app->retrieve_dat2(
-            EXPORTING
-              iv_ebeln = iv_ebeln
-            EXCEPTIONS
-              contains_error = 1
-              OTHERS         = 2 ).
-          IF sy-subrc <> 0.
-            MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4. RETURN.
-          ENDIF.
-
-        CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
-          EXPORTING
-            formname = 'ZGKC_SAS_SF'
-          IMPORTING
-            fm_name  = lv_fm.
-
-        CALL FUNCTION lv_fm
+        app->add_attachment(
           EXPORTING
             iv_ebeln = iv_ebeln
-            iv_waers = lv_waers
-          TABLES
-            mt_itemdat = mt_outdat2.
+        ).
 
         lo_send_request->set_send_immediately( 'X' ).
         lv_result = lo_send_request->send( i_with_error_screen = 'X' ).
@@ -718,5 +730,100 @@ CLASS lcl_application IMPLEMENTATION.
       TEXT-m04, " For your information.
       '<br>'.
 
+  ENDMETHOD.
+
+  METHOD add_attachment.
+    SELECT SINGLE waers
+      FROM zgkc_po_t
+      WHERE ebeln = @iv_ebeln
+      INTO @DATA(lv_waers).
+
+    app->retrieve_dat2(
+        EXPORTING
+          iv_ebeln = iv_ebeln
+        EXCEPTIONS
+          contains_error = 1
+          OTHERS         = 2 ).
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4. RETURN.
+    ENDIF.
+
+    CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+      EXPORTING
+        formname = 'ZGKC_SAS_SF'
+      IMPORTING
+        fm_name  = lv_fm.
+
+    CLEAR ls_ctrlop.
+    ls_ctrlop-no_dialog = 'X'.
+    ls_ctrlop-preview   = space.
+    ls_ctrlop-getotf    = 'X'.
+
+    CLEAR ls_outopt.
+    ls_outopt-tddest    = 'LP01'.
+    ls_outopt-tdimmed   = 'X'.
+    ls_outopt-tdnoprint = 'X'.
+
+    CALL FUNCTION lv_fm
+      EXPORTING
+        control_parameters = ls_ctrlop
+        output_options     = ls_outopt
+        iv_ebeln           = iv_ebeln
+        iv_waers           = lv_waers
+      IMPORTING
+        job_output_info    = lt_otfdata
+      TABLES
+        mt_itemdat         = mt_outdat2
+      EXCEPTIONS
+        formatting_error   = 1
+        internal_error     = 2
+        send_error         = 3
+        user_canceled      = 4
+        OTHERS             = 5.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    APPEND LINES OF lt_otfdata-otfdata TO lt_otf.
+
+    CALL FUNCTION 'CONVERT_OTF'
+      EXPORTING
+        format                = 'PDF'
+      IMPORTING
+        bin_filesize          = lv_size
+        bin_file              = lv_bin_xstr
+      TABLES
+        otf                   = lt_otf
+        lines                 = lt_pdf_tab
+      EXCEPTIONS
+        err_max_linewidth     = 1
+        err_format            = 2
+        err_conv_not_possible = 3
+        OTHERS                = 4.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+    CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
+      EXPORTING
+        buffer     = lv_bin_xstr
+      TABLES
+        binary_tab = lt_solix.
+
+    CALL METHOD lo_document->add_attachment
+      EXPORTING
+        i_attachment_type    = 'PDF'
+        i_attachment_size    = lv_size
+        i_attachment_subject = 'Purchase Order Approval'
+        i_att_content_hex    = lt_solix.
+  ENDMETHOD.
+
+  METHOD show_message.
+    CALL FUNCTION 'FINB_BAPIRET2_DISPLAY'
+      EXPORTING
+        it_message = it_msgdat[].
   ENDMETHOD.
 ENDCLASS.
