@@ -157,6 +157,18 @@ CLASS lcl_application IMPLEMENTATION.
         WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4. RETURN.
     ENDIF.
 
+    READ TABLE mt_outdat ASSIGNING FIELD-SYMBOL(<fs_outdat>) INDEX 1.
+    app->retrieve_dat2(
+      EXPORTING
+        iv_ebeln = <fs_outdat>-ebeln
+      EXCEPTIONS
+        contains_error = 1
+        OTHERS         = 2 ).
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+        WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4. RETURN.
+    ENDIF.
+
     CALL SCREEN 0100.
   ENDMETHOD.
 
