@@ -443,7 +443,7 @@ CLASS lcl_application IMPLEMENTATION.
           EXPORTING
             it_msgdat = app->send_email(
               EXPORTING
-                iv_ebeln = <fs_outdat>-ebeln ) ).
+                iv_ebeln = ms_po-ebeln ) ).
       ENDIF.
 
       app->clear_screen( ).
@@ -529,14 +529,17 @@ CLASS lcl_application IMPLEMENTATION.
       TEXT-m01, " New Purchase Entry
       '<br>',
       '<br>',
-      TEXT-m02. " Dear Manager,
+      TEXT-m02, " Dear Manager,
+      '<br>'.
 
     rt_mailtab = VALUE #( BASE rt_mailtab
         ( line = |A purchase entry has been made with the PO Document Number { iv_ebeln }.| )
     ).
 
     add_line:
+      '<br>',
       TEXT-m03, " It is awaiting your approval.
+      '<br>',
       TEXT-m04, " For your information.
       '<br>',
       '<br>',

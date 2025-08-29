@@ -675,7 +675,6 @@ CLASS lcl_application IMPLEMENTATION.
             CALL METHOD cl_cam_address_bcs=>create_internet_address
               EXPORTING
                 i_address_string = 'gok.akca@hotmail.com'
-                "i_address_name   = 'Gökçe Akca'
               RECEIVING
                 result           = lo_sender.
 
@@ -731,14 +730,17 @@ CLASS lcl_application IMPLEMENTATION.
       TEXT-m01, " Purchase Entry Approval
       '<br>',
       '<br>',
-      TEXT-m02. " Dear Accounting Manager,
+      TEXT-m02, " Dear Accounting Manager,
+      '<br>'.
 
     rt_mailtab = VALUE #( BASE rt_mailtab
         ( line = |The purchase entry with the PO Document Number { iv_ebeln } has been approved.| )
     ).
 
     add_line:
+      '<br>',
       TEXT-m03, " It is awaiting your approval for purchase.
+      '<br>',
       TEXT-m04, " For your information.
       '<br>'.
 
@@ -767,14 +769,13 @@ CLASS lcl_application IMPLEMENTATION.
       IMPORTING
         fm_name  = lv_fm.
 
-    CLEAR ls_ctrlop.
     ls_ctrlop-no_dialog = 'X'.
-    ls_ctrlop-preview   = space.
+    ls_ctrlop-preview   = 'X'.
     ls_ctrlop-getotf    = 'X'.
+    ls_ctrlop-device    = 'PRINTER'.
 
-    CLEAR ls_outopt.
-    ls_outopt-tddest    = 'LP01'.
-    ls_outopt-tdimmed   = 'X'.
+    ls_outopt-tdnoprev = 'X'.
+    ls_outopt-tddest = 'LP01'.
     ls_outopt-tdnoprint = 'X'.
 
     CALL FUNCTION lv_fm
@@ -798,8 +799,7 @@ CLASS lcl_application IMPLEMENTATION.
               WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
     ENDIF.
 
-    APPEND LINES OF lt_otfdata-otfdata TO lt_otf.
-
+    lt_otf[] = lt_otfdata-otfdata[].
     CALL FUNCTION 'CONVERT_OTF'
       EXPORTING
         format                = 'PDF'
@@ -807,8 +807,8 @@ CLASS lcl_application IMPLEMENTATION.
         bin_filesize          = lv_size
         bin_file              = lv_bin_xstr
       TABLES
-        otf                   = lt_otf
-        lines                 = lt_pdf_tab
+        otf                   = lt_otf[]
+        lines                 = lt_pdf_tab[]
       EXCEPTIONS
         err_max_linewidth     = 1
         err_format            = 2
@@ -816,7 +816,7 @@ CLASS lcl_application IMPLEMENTATION.
         OTHERS                = 4.
     IF sy-subrc <> 0.
       MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
-              WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
     ENDIF.
 
     CALL FUNCTION 'SCMS_XSTRING_TO_BINARY'
@@ -829,7 +829,7 @@ CLASS lcl_application IMPLEMENTATION.
       EXPORTING
         i_attachment_type    = 'PDF'
         i_attachment_size    = lv_size
-        i_attachment_subject = 'Purchase Order Approval'
+        i_attachment_subject = lv_subject
         i_att_content_hex    = lt_solix.
   ENDMETHOD.
 
