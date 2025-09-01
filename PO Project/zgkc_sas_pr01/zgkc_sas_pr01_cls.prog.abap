@@ -611,15 +611,15 @@ CLASS lcl_application IMPLEMENTATION.
       WHERE ebeln = <fs_outdat>-ebeln.
       IF sy-subrc IS INITIAL.
         COMMIT WORK.
-        app->show_message(
-          EXPORTING
-            it_msgdat = app->send_email(
-              EXPORTING
-                iv_ebeln = <fs_outdat>-ebeln ) ).
-      ENDIF.
+        <fs_outdat>-light = '@08@'.
+        <fs_outdat>-status = '03'.
 
-      <fs_outdat>-light = '@08@'.
-      <fs_outdat>-status = '03'.
+      app->show_message(
+        EXPORTING
+          it_msgdat = app->send_email(
+            EXPORTING
+              iv_ebeln = <fs_outdat>-ebeln ) ).
+      ENDIF.
     ENDLOOP.
 
     MESSAGE 'Approved the selected purchase order(s) successfully.' TYPE 'I'.
@@ -769,19 +769,20 @@ CLASS lcl_application IMPLEMENTATION.
       IMPORTING
         fm_name  = lv_fm.
 
+    "Control Parameters
     ls_ctrlop-no_dialog = 'X'.
     ls_ctrlop-preview   = 'X'.
     ls_ctrlop-getotf    = 'X'.
-    ls_ctrlop-device    = 'PRINTER'.
 
+    "Output Options
     ls_outopt-tdnoprev = 'X'.
     ls_outopt-tddest = 'LP01'.
-    ls_outopt-tdnoprint = 'X'.
 
     CALL FUNCTION lv_fm
       EXPORTING
         control_parameters = ls_ctrlop
         output_options     = ls_outopt
+        user_settings      = ' '
         iv_ebeln           = iv_ebeln
         iv_waers           = lv_waers
       IMPORTING

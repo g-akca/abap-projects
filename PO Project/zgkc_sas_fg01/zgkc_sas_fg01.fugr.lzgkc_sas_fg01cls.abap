@@ -554,7 +554,7 @@ CLASS lcl_application IMPLEMENTATION.
       '<th style="background-color: #808080; padding: 8px; width: auto;">Quantity</th>',
       '<th style="background-color: #808080; padding: 8px; width: auto;">UoM</th>',
       '<th style="background-color: #808080; padding: 8px; width: auto;">Material Type</th>',
-      '<th style="background-color: #808080; padding: 8px; width: auto;">Goods Group</th>',
+      '<th style="background-color: #808080; padding: 8px; width: auto;">Material Group</th>',
       '<th style="background-color: #808080; padding: 8px; width: auto;">Price</th>',
       '<th style="background-color: #808080; padding: 8px; width: auto;">Currency</th>',
       '<th style="background-color: #808080; padding: 8px; width: auto;">Company Code</th>',

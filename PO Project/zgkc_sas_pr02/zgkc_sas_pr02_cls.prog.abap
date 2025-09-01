@@ -601,7 +601,7 @@ CLASS lcl_application IMPLEMENTATION.
       INTO CORRESPONDING FIELDS OF TABLE @mt_itemdat.
 
     LOOP AT mt_itemdat ASSIGNING FIELD-SYMBOL(<ms_itemdat>).
-      APPEND |Item: { <ms_itemdat>-ebelp }, Material ID: { <ms_itemdat>-matnr }, Material: { <ms_itemdat>-maktx }, Quantity: { <ms_itemdat>-menge }, UoM: { <ms_itemdat>-meins }, Material Type: { <ms_itemdat>-mtart }, | && |Goods Group: {
+      APPEND |Item: { <ms_itemdat>-ebelp }, Material ID: { <ms_itemdat>-matnr }, Material: { <ms_itemdat>-maktx }, Quantity: { <ms_itemdat>-menge }, UoM: { <ms_itemdat>-meins }, Material Type: { <ms_itemdat>-mtart }, | && |Material Group: {
 <ms_itemdat>-matkl }, Price: { <ms_itemdat>-wrbtr }, Total Price: { <ms_itemdat>-wrbtr_sum }| TO lt_data.
     ENDLOOP.
 
